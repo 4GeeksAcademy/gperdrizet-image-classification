@@ -43,7 +43,7 @@ def make_datasets(
         epochs: int=SINGLE_TRAINING_RUN_EPOCHS,
         prefetch: bool=True
 ) -> Tuple[tf.data.Dataset, tf.data.Dataset]:
-    
+
     '''Makes training and validation dataset generator objects.'''
 
     training_dataset, validation_dataset=tf.keras.utils.image_dataset_from_directory(
@@ -64,7 +64,7 @@ def make_datasets(
 
         training_dataset=training_dataset.cache().shuffle(total_images, reshuffle_each_iteration=True).prefetch(buffer_size=total_images).repeat()
         validation_dataset=training_dataset.cache().shuffle(total_images, reshuffle_each_iteration=True).prefetch(buffer_size=total_images).repeat()
-    
+
     else:
 
         training_dataset=training_dataset.repeat()
@@ -123,6 +123,7 @@ def compile_model(
 
     return model
 
+
 def single_training_run(
         training_data_path: str,
         image_width: int=IMAGE_WIDTH,
@@ -139,7 +140,7 @@ def single_training_run(
     '''Does one training run.'''
 
     # Get dictionary of all arguments being passed into function
-    named_args = {**locals()}
+    named_args={**locals()}
 
     # Make output file name string using values of arguments
     # from function call
@@ -201,7 +202,12 @@ def single_training_run(
     return training_result
 
 
-def plot_single_training_run(training_results: keras.callbacks.History) -> plt:
+def plot_single_training_run(
+        training_results: keras.callbacks.History,
+        grid: bool=False,
+        log_scale: bool=False
+) -> plt:
+    
     '''Takes a training results dictionary, plots it.'''
 
     # Set-up a 1x2 figure for accuracy and binary cross-entropy
@@ -216,7 +222,13 @@ def plot_single_training_run(training_results: keras.callbacks.History) -> plt:
     axs[0].plot(np.array(training_results.history['val_binary_accuracy']) * 100, label='Validation')
     axs[0].set_xlabel('Epoch')
     axs[0].set_ylabel('Accuracy (%)')
-    axs[0].legend(loc='upper left')
+    axs[0].legend(loc='best')
+
+    if grid is True:
+        axs[0].grid(which='both', axis='y')
+
+    if log_scale is True:
+        axs[0].set_yscale('log')
 
     # Plot training and validation binary cross-entropy
     axs[1].set_title('Binary cross-entropy')
@@ -224,6 +236,12 @@ def plot_single_training_run(training_results: keras.callbacks.History) -> plt:
     axs[1].plot(training_results.history['val_loss'])
     axs[1].set_xlabel('Epoch')
     axs[1].set_ylabel('Binary cross-entropy')
+
+    if grid is True:
+        axs[1].grid(which='both', axis='y')
+
+    if log_scale is True:
+        axs[1].set_yscale('log')
 
     fig.tight_layout()
 
@@ -242,7 +260,7 @@ def hyperparameter_optimization_run(
         steps_per_epoch: int=OPTIMIZATION_TRAINING_RUN_STEPS_PER_EPOCH,
         validation_steps: int=OPTIMIZATION_TRAINING_RUN_VALIDATION_STEPS
 ) -> keras.callbacks.History:
-    
+
     '''Does hyperparameter optimization run'''
 
     # Get dictionary of all arguments being passed into function
@@ -251,11 +269,11 @@ def hyperparameter_optimization_run(
     # Make output file name string using values of arguments
     # from function call
     results_file='../data/experiment_results/optimization_run'
-    
+
     for key, value in named_args.items():
         if key != 'training_data_path':
             if isinstance(value, list):
-                results_file+=f'_{value[0]}'
+                results_file+=f"_{'_'.join(map(str, value))}"
             else:
                 results_file+=f'_{value}'
 
@@ -333,7 +351,9 @@ def hyperparameter_optimization_run(
 def plot_hyperparameter_optimization_run(
         hyperparameter_optimization_results: dict,
         hyperparameters: dict,
-        plot_labels: list
+        plot_labels: list,
+        accuracy_ylims: list=[None, None],
+        entropy_ylims: list=[None, None]
 ) -> plt:
     
     '''Takes hyperparameter optimization results and hyperparameters dictionary, plots.'''
@@ -384,6 +404,7 @@ def plot_hyperparameter_optimization_run(
         axs[i,0].plot(np.array(training_result.history['val_binary_accuracy']) * 100, label='Validation')
         axs[i,0].set_xlabel('Epoch')
         axs[i,0].set_ylabel('Accuracy (%)')
+        axs[i,0].set_ylim(accuracy_ylims)
         axs[i,0].legend(loc='best')
 
         # Plot training and validation binary cross-entropy
@@ -392,6 +413,7 @@ def plot_hyperparameter_optimization_run(
         axs[i,1].plot(training_result.history['val_loss'], label='Validation')
         axs[i,1].set_xlabel('Epoch')
         axs[i,1].set_ylabel('Binary cross-entropy')
+        axs[i,1].set_ylim(entropy_ylims)
         axs[i,1].legend(loc='best')
 
     fig.tight_layout()
