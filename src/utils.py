@@ -18,30 +18,25 @@ from tensorflow.keras.models import Sequential
 # Set some global default values for how long/how much to train
 BATCH_SIZE=8
 LEARNING_RATE=0.1
-L1_PENALTY=0
-L2_PENALTY=0
+L1_PENALTY=None
+L2_PENALTY=None
 IMAGE_HEIGHT=64
 IMAGE_WIDTH=48
 ASPECT_RATIO=4/3
+FILTER_NUMS=[16,32,64]
+FILTER_SIZE=3
 
 SINGLE_TRAINING_RUN_EPOCHS=200
-SINGLE_TRAINING_RUN_STEPS_PER_EPOCH=25
-SINGLE_TRAINING_RUN_VALIDATION_STEPS=25
-
 OPTIMIZATION_TRAINING_RUN_EPOCHS=20
-OPTIMIZATION_TRAINING_RUN_STEPS_PER_EPOCH=10
-OPTIMIZATION_TRAINING_RUN_VALIDATION_STEPS=10
-
+STEPS_PER_EPOCH=10
+VALIDATION_STEPS=10
 
 # Define a re-usable helper function to create training and validation datasets
 def make_datasets(
         training_data_path: str,
         image_width: int=IMAGE_WIDTH,
-        image_height: int=IMAGE_HEIGHT, 
-        batch_size: int=BATCH_SIZE,
-        steps_per_epoch: int=SINGLE_TRAINING_RUN_STEPS_PER_EPOCH,
-        epochs: int=SINGLE_TRAINING_RUN_EPOCHS,
-        prefetch: bool=True
+        image_height: int=IMAGE_HEIGHT,
+        batch_size: int=BATCH_SIZE
 ) -> Tuple[tf.data.Dataset, tf.data.Dataset]:
 
     '''Makes training and validation dataset generator objects.'''
@@ -57,35 +52,25 @@ def make_datasets(
         batch_size=batch_size
     )
 
-    if prefetch is True:
-
-        epoch_images=batch_size*steps_per_epoch
-        total_images=epoch_images*epochs
-
-        training_dataset=training_dataset.cache().shuffle(total_images, reshuffle_each_iteration=True).prefetch(buffer_size=total_images).repeat()
-        validation_dataset=training_dataset.cache().shuffle(total_images, reshuffle_each_iteration=True).prefetch(buffer_size=total_images).repeat()
-
-    else:
-
-        training_dataset=training_dataset.repeat()
-        validation_dataset=validation_dataset.repeat()
-
     return training_dataset, validation_dataset
 
 
+@tf.autograph.experimental.do_not_convert
 def compile_model(
         training_dataset: tf.data.Dataset,
         image_width: int=IMAGE_WIDTH,
         image_height: int=IMAGE_HEIGHT,
         learning_rate: float=LEARNING_RATE,
         l1: float=L1_PENALTY,
-        l2: float=L2_PENALTY
+        l2: float=L2_PENALTY,
+        filter_nums=FILTER_NUMS,
+        filter_size=FILTER_SIZE
 ) -> tf.keras.Model:
 
     '''Builds the convolutional neural network classification model'''
 
-    # Define and adapt a normalization layer. This step uses a sample of images 
-    # from the training dataset to calculate the mean and standard deviation 
+    # Define and adapt a normalization layer. This step uses a sample of images
+    # from the training dataset to calculate the mean and standard deviation
     # which will then be used to normalize the data during training
     sample_data=training_dataset.take(1000)
     adapt_data=sample_data.map(lambda x, y: x)
@@ -102,15 +87,25 @@ def compile_model(
     model=Sequential([
         layers.Input((image_width, image_height, 1)),
         norm_layer,
-        layers.Conv2D(16, 3, activation='relu', kernel_initializer=initializer),
+        layers.Conv2D(filter_nums[0], filter_size, activation='relu', kernel_initializer=initializer),
         layers.MaxPooling2D(pool_size=(2, 2)),
-        layers.Conv2D(32, 3, activation='relu', kernel_initializer=initializer),
+        layers.Conv2D(filter_nums[1], filter_size, activation='relu', kernel_initializer=initializer),
         layers.MaxPooling2D(pool_size=(2, 2)),
-        layers.Conv2D(64, 3, activation='relu', kernel_initializer=initializer),
+        layers.Conv2D(filter_nums[2], filter_size, activation='relu', kernel_initializer=initializer),
         layers.MaxPooling2D(pool_size=(2, 2)),
         layers.Flatten(),
-        layers.Dense(128, kernel_regularizer=regularizer, activation='relu', kernel_initializer=initializer),
-        layers.Dense(64, kernel_regularizer=regularizer, activation='relu', kernel_initializer=initializer),
+        layers.Dense(
+            128,
+            kernel_regularizer=regularizer,
+            activation='relu',
+            kernel_initializer=initializer
+        ),
+        layers.Dense(
+            64,
+            kernel_regularizer=regularizer,
+            activation='relu',
+            kernel_initializer=initializer
+        ),
         layers.Dense(1, activation='sigmoid', kernel_initializer=initializer)
     ])
 
@@ -120,6 +115,8 @@ def compile_model(
     # Compile the model, specifying the type of loss to use during training and any extra
     # metrics to evaluate
     model.compile(loss='binary_crossentropy', optimizer=optimizer, metrics=['binary_accuracy'])
+
+    print(model.summary())
 
     return model
 
@@ -132,40 +129,41 @@ def single_training_run(
         learning_rate: float=LEARNING_RATE,
         l1_penalty: float=L1_PENALTY,
         l2_penalty: float=L2_PENALTY,
+        filter_nums: list=FILTER_NUMS,
+        filter_size: int=FILTER_SIZE,
         epochs: int=SINGLE_TRAINING_RUN_EPOCHS,
-        steps_per_epoch: int=SINGLE_TRAINING_RUN_STEPS_PER_EPOCH,
-        validation_steps: int=SINGLE_TRAINING_RUN_VALIDATION_STEPS
+        steps_per_epoch: int=STEPS_PER_EPOCH,
+        validation_steps: int=VALIDATION_STEPS,
+        return_datasets: bool=False
 ) -> keras.callbacks.History:
-    
+
     '''Does one training run.'''
 
     # Get dictionary of all arguments being passed into function
     named_args={**locals()}
 
-    # Make output file name string using values of arguments
-    # from function call
+    # Make output file name string using values of arguments from function call
     results_file='../data/experiment_results/single_model_run'
+
     for key, value in named_args.items():
         if key != 'training_data_path':
             results_file+=f'_{value}'
 
     results_file+='.plk'
 
+    # Calculate the image height from the width and target aspect ratio
+    image_height=int(image_width / aspect_ratio)
+
+    # Make the streaming datasets
+    training_dataset, validation_dataset=make_datasets(
+        training_data_path,
+        image_width,
+        image_height,
+        batch_size
+    )
+
     # Check if we have already run this experiment, if not, run it and save the results
-    if os.path.isfile(results_file) == False:
-
-        # Calculate the image height from the width and target aspect ratio
-        image_height=int(image_width / aspect_ratio)
-
-        # Make the streaming datasets
-        training_dataset, validation_dataset=make_datasets(
-            training_data_path,
-            image_width,
-            image_height,
-            batch_size,
-            steps_per_epoch,
-            epochs
-        )
+    if os.path.isfile(results_file) is False:
 
         # Make the model
         model=compile_model(
@@ -174,7 +172,9 @@ def single_training_run(
             image_height,
             learning_rate,
             l1_penalty,
-            l2_penalty
+            l2_penalty,
+            filter_nums,
+            filter_size
         )
 
         # Do the training run
@@ -192,13 +192,16 @@ def single_training_run(
             pickle.dump(training_result, output_file, protocol=pickle.HIGHEST_PROTOCOL)
 
     # If we have already run it, load the result so we can plot it
-    elif os.path.isfile(results_file) == True:
+    elif os.path.isfile(results_file) is True:
 
         print('Training run already complete, loading results from disk.')
 
         with open(results_file, 'rb') as output_file:
             training_result=pickle.load(output_file)
 
+    if return_datasets is True:
+        return training_result, training_dataset, validation_dataset
+    
     return training_result
 
 
@@ -207,7 +210,7 @@ def plot_single_training_run(
         grid: bool=False,
         log_scale: bool=False
 ) -> plt:
-    
+
     '''Takes a training results dictionary, plots it.'''
 
     # Set-up a 1x2 figure for accuracy and binary cross-entropy
@@ -255,10 +258,12 @@ def hyperparameter_optimization_run(
         learning_rates: list=[LEARNING_RATE],
         l1_penalties: list=[L1_PENALTY],
         l2_penalties: list=[L2_PENALTY],
+        filter_nums_list: list=[FILTER_NUMS],
+        filter_sizes: int=[FILTER_SIZE],
         aspect_ratio: int=ASPECT_RATIO,
         epochs: int=OPTIMIZATION_TRAINING_RUN_EPOCHS,
-        steps_per_epoch: int=OPTIMIZATION_TRAINING_RUN_STEPS_PER_EPOCH,
-        validation_steps: int=OPTIMIZATION_TRAINING_RUN_VALIDATION_STEPS
+        steps_per_epoch: int=STEPS_PER_EPOCH,
+        validation_steps: int=VALIDATION_STEPS
 ) -> keras.callbacks.History:
 
     '''Does hyperparameter optimization run'''
@@ -266,8 +271,7 @@ def hyperparameter_optimization_run(
     # Get dictionary of all arguments being passed into function
     named_args = {**locals()}
 
-    # Make output file name string using values of arguments
-    # from function call
+    # Make output file name string using values of arguments from function call
     results_file='../data/experiment_results/optimization_run'
 
     for key, value in named_args.items():
@@ -280,21 +284,33 @@ def hyperparameter_optimization_run(
     results_file+='.plk'
 
     # Check if we have already run this experiment, if not, run it and save the results
-    if os.path.isfile(results_file) == False:
+    if os.path.isfile(results_file) is False:
 
         # Empty collector for individual run results
         hyperparameter_optimization_results=[]
 
         # Make a list of condition tuples by taking the cartesian product
         # of the hyperparameter setting lists
-        conditions=list(itertools.product(batch_sizes, learning_rates, l1_penalties, l2_penalties, image_widths))
-        num_conditions=len(batch_sizes)*len(learning_rates)*len(l1_penalties)*len(l2_penalties)*len(image_widths)
+        conditions=list(
+            itertools.product(
+                batch_sizes,
+                learning_rates,
+                l1_penalties,
+                l2_penalties,
+                image_widths,
+                filter_nums_list,
+                filter_sizes
+            )
+        )
+
+        num_conditions=len(batch_sizes)*len(learning_rates)*len(l1_penalties
+            )*len(l2_penalties)*len(image_widths)*len(filter_nums_list)*len(filter_sizes)
 
         # Loop on the conditions
         for i, condition in enumerate(conditions):
 
             # Unpack the hyperparameter values from the condition tuple
-            batch_size, learning_rate, l1, l2, image_width=condition
+            batch_size, learning_rate, l1, l2, image_width, filter_nums, filter_size=condition
             print(f'Starting training run {i + 1} of {num_conditions}')
 
             # Calculate the image height from the width and target aspect ratio
@@ -304,10 +320,8 @@ def hyperparameter_optimization_run(
             training_dataset, validation_dataset=make_datasets(
                 training_data_path,
                 image_width,
-                image_height, 
-                batch_size,
-                steps_per_epoch,
-                epochs
+                image_height,
+                batch_size
             )
 
             # Compile the model with the learning rate for this run
@@ -317,7 +331,9 @@ def hyperparameter_optimization_run(
                 image_height,
                 learning_rate,
                 l1,
-                l2
+                l2,
+                filter_nums,
+                filter_size
             )
 
             # Do the training run
@@ -335,10 +351,14 @@ def hyperparameter_optimization_run(
 
         # Save the result
         with open(results_file, 'wb') as output_file:
-            pickle.dump(hyperparameter_optimization_results, output_file, protocol=pickle.HIGHEST_PROTOCOL)
+            pickle.dump(
+                hyperparameter_optimization_results,
+                output_file,
+                protocol=pickle.HIGHEST_PROTOCOL
+            )
 
     # If we have already run it, load the result so we can plot it
-    elif os.path.isfile(results_file) == True:
+    elif os.path.isfile(results_file) is True:
 
         print('Optimization run already complete, loading results from disk.')
 
@@ -352,10 +372,10 @@ def plot_hyperparameter_optimization_run(
         hyperparameter_optimization_results: dict,
         hyperparameters: dict,
         plot_labels: list,
-        accuracy_ylims: list=[None, None],
-        entropy_ylims: list=[None, None]
+        accuracy_ylims: list=(None, None),
+        entropy_ylims: list=(None, None)
 ) -> plt:
-    
+
     '''Takes hyperparameter optimization results and hyperparameters dictionary, plots.'''
 
     # Dictionary to translate hyperparameter variable names into formatted versions
@@ -365,13 +385,15 @@ def plot_hyperparameter_optimization_run(
         'learning_rates': 'learning rate',
         'l1_penalties': 'L1 penalty',
         'l2_penalties': 'L2 penalty',
-        'image_widths': 'Image width'
+        'image_widths': 'Image width',
+        'filter_nums_list': 'Filter counts',
+        'filter_sizes': 'Filter size'
     }
-    
+
     # Set-up a 1x2 figure for accuracy and binary cross-entropy
     fig, axs=plt.subplots(
-        len(hyperparameter_optimization_results), 
-        2, 
+        len(hyperparameter_optimization_results),
+        2,
         figsize=(8,3*len(hyperparameter_optimization_results))
     )
 
@@ -400,8 +422,14 @@ def plot_hyperparameter_optimization_run(
 
         # Plot training and validation accuracy
         axs[i,0].set_title(condition_string)
-        axs[i,0].plot(np.array(training_result.history['binary_accuracy']) * 100, label='Training')
-        axs[i,0].plot(np.array(training_result.history['val_binary_accuracy']) * 100, label='Validation')
+        axs[i,0].plot(np.array(
+            training_result.history['binary_accuracy']) * 100,
+            label='Training'
+        )
+        axs[i,0].plot(np.array(
+            training_result.history['val_binary_accuracy']) * 100,
+            label='Validation'
+        )
         axs[i,0].set_xlabel('Epoch')
         axs[i,0].set_ylabel('Accuracy (%)')
         axs[i,0].set_ylim(accuracy_ylims)
