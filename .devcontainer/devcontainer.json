@@ -22,6 +22,6 @@
 	},
 
 	// Use 'postCreateCommand' to run commands after the container is created.
-	"postCreateCommand": "mkdir data && mkdir data/raw && mkdir data/interim && mkdir data/processed && mkdir data/experiment_results && mkdir models && touch .env",
+	"postCreateCommand": "touch .env",
 	"postAttachCommand": "htop"
 }
