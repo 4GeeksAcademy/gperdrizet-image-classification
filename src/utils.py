@@ -1,11 +1,14 @@
 '''Helper function for training of convolutional neural network classifier.'''
 
-
 # Handle imports up-front
 import os
 import itertools
 import pickle
+import zipfile
+import shutil
+import glob
 from typing import Tuple
+from pathlib import Path
 
 import numpy as np
 import tensorflow as tf
@@ -14,6 +17,10 @@ import matplotlib.pyplot as plt
 from tensorflow import keras
 from tensorflow.keras import layers
 from tensorflow.keras.models import Sequential
+
+####################################################################
+# Convolutional neural network training and optimization functions #
+####################################################################
 
 # Set some global default values for how long/how much to train
 BATCH_SIZE=8
@@ -87,11 +94,26 @@ def compile_model(
     model=Sequential([
         layers.Input((image_width, image_height, 1)),
         norm_layer,
-        layers.Conv2D(filter_nums[0], filter_size, activation='relu', kernel_initializer=initializer),
+        layers.Conv2D(
+            filter_nums[0],
+            filter_size,
+            activation='relu',
+            kernel_initializer=initializer
+        ),
         layers.MaxPooling2D(pool_size=(2, 2)),
-        layers.Conv2D(filter_nums[1], filter_size, activation='relu', kernel_initializer=initializer),
+        layers.Conv2D(
+            filter_nums[1],
+            filter_size,
+            activation='relu',
+            kernel_initializer=initializer
+        ),
         layers.MaxPooling2D(pool_size=(2, 2)),
-        layers.Conv2D(filter_nums[2], filter_size, activation='relu', kernel_initializer=initializer),
+        layers.Conv2D(
+            filter_nums[2],
+            filter_size,
+            activation='relu',
+            kernel_initializer=initializer
+        ),
         layers.MaxPooling2D(pool_size=(2, 2)),
         layers.Flatten(),
         layers.Dense(
@@ -445,3 +467,206 @@ def plot_hyperparameter_optimization_run(
     fig.tight_layout()
 
     return plt
+
+
+####################################################################
+# Data preparation functions #######################################
+####################################################################
+
+def prep_data() -> Tuple[str, str]:
+
+    '''Looks at working directory to determine if we are running 
+    in a Kaggle notebook or not. Prepares data accordingly. Returns 
+    paths to training and testing datasets.'''
+    
+    working_directory=os.getcwd()
+    path_list=working_directory.split(os.sep)
+    path_list=[s for s in path_list if s]
+
+    if len(path_list) >= 1:
+        if path_list[0] == 'kaggle':
+            environment='kaggle'
+
+        else:
+            environment='other'
+    else:
+        environment='other'
+
+    if environment == 'other':
+        training_data_path, testing_data_path=other_env_data_prep()
+
+    elif environment == 'kaggle':
+        training_data_path, testing_data_path=kaggle_env_data_prep()
+
+    else:
+        print('Could not determine environment')
+        training_data_path, testing_data_path=None, None
+
+    return training_data_path, testing_data_path
+
+
+def other_env_data_prep() -> Tuple[str, str]:
+    '''Organizes data that has already been downloaded via
+    get_data.sh in a non-kaggle environment. Returns paths 
+    to training and testing datasets.'''
+
+    print('Not running in Kaggle notebook')
+
+    image_directory='../data/images'
+
+    print('Checking data prep')
+    run_data_prep=check_data_prep(image_directory)
+
+    if run_data_prep is False:
+        print('Data prep already complete')
+
+    else:
+        print('Running data prep')
+        raw_image_directory=f'{image_directory}/raw'
+        archive_filepath=f'{raw_image_directory}/dogs-vs-cats.zip'
+        print(f'Image archive should be at {archive_filepath}')
+
+        if Path(archive_filepath).is_file() is False:
+            print(f'{archive_filepath} does not exist')
+
+        else:
+            if Path(f'{raw_image_directory}/train.zip').is_file() is False:
+                print(f'Extracting {archive_filepath}')
+                with zipfile.ZipFile(archive_filepath, mode='r') as archive:
+                    archive.extract('train.zip', f'{raw_image_directory}/')
+
+            else:
+                print(f'dogs-vs-cats.zip already extracted')
+
+            if Path(f'{raw_image_directory}/train').is_dir() is False:
+                training_archive_filepath=f'{raw_image_directory}/train.zip'
+
+                with zipfile.ZipFile(training_archive_filepath, mode='r') as archive:
+                    for file in archive.namelist():
+                        if file.endswith('.jpg'):
+                            archive.extract(file, raw_image_directory)
+
+            else:
+                print(f'train.zip already extracted')
+                
+        print('Image extraction complete')
+        
+        print('Making training and testing datasets')
+        copy_images(raw_image_directory, image_directory)
+        print('Done')
+    
+
+    return '../data/images/training', '../data/images/testing'
+
+
+def kaggle_env_data_prep() -> Tuple[str, str]:
+
+    '''Organizes data from attached data source in kaggle environment.
+    Returns paths to training and testing datasets.'''
+
+    print('Running in Kaggle notebook')
+
+    image_directory='/kaggle/working/images'
+    raw_image_directory=f'{image_directory}/raw'
+    archive_filepath='/kaggle/input/dogs-vs-cats/train.zip'
+
+    print('Checking data prep')
+    run_data_prep=check_data_prep(image_directory)
+
+    if run_data_prep is False:
+        print('Data prep already complete')
+
+    else:
+        print('Running data prep')
+        print(f'Image archive should be at {archive_filepath}')
+
+        if Path(archive_filepath).is_file() is False:
+            print(f'{archive_filepath} does not exist')
+
+        else:
+            if Path(f'{raw_image_directory}/train').is_dir() is False:
+                Path(f'{raw_image_directory}/train').mkdir(parents=True)
+                with zipfile.ZipFile(archive_filepath, mode='r') as archive:
+                    for file in archive.namelist():
+                        if file.endswith('.jpg'):
+                            archive.extract(file, raw_image_directory)
+
+            else:
+                print(f'train.zip already extracted')
+                
+        print('Image extraction complete')
+        print('Making training and testing datasets')
+        copy_images(raw_image_directory, image_directory)
+        print('Done')
+
+    return f'{image_directory}/training', f'{image_directory}/testing'
+
+
+def check_data_prep(image_directory: str) -> bool:
+    '''Takes string path to image directory. Checks training 
+    and testing directories and image counts, returns True 
+    or False if data preparation is complete.'''
+
+    run_data_prep=False
+
+    dataset_directories=[
+        'training/cats',
+        'training/dogs',
+        'testing/cats',
+        'testing/dogs',
+    ]
+
+    for dataset_directory in dataset_directories:
+        if Path(f'{image_directory}/{dataset_directory}').is_dir() is False:
+            print(f'Missing {image_directory}/{dataset_directory}')
+            run_data_prep=True
+
+    image_count=0
+
+    if run_data_prep is False:
+        for dataset_directory in dataset_directories:
+            images=glob.glob(f'{image_directory}/{dataset_directory}/*.jpg')
+            image_count+=len(images)
+
+        if image_count != 25000:
+            print(f'Missing images, final count: {image_count}')
+            run_data_prep=True
+
+    return run_data_prep
+
+
+def copy_images(raw_image_directory: str, image_directory: str) -> None:
+    '''Takes string paths to image directory and raw image directory, splits
+    cats and dogs into training and testing subsets and copies each to 
+    corresponding subdirectory.'''
+
+    # Get a list of dog and cat images
+    dogs=glob.glob(f'{raw_image_directory}/train/dog.*')
+    cats=glob.glob(f'{raw_image_directory}/train/cat.*')
+
+    num_training_images=int(len(dogs) * 0.7)
+    training_dogs=dogs[0:num_training_images]
+    testing_dogs=dogs[num_training_images:]
+    training_cats=cats[0:num_training_images]
+    testing_cats=cats[num_training_images:]
+
+    print('Moving files to train & test, cat & dog subdirectories')
+
+    datasets={
+        'training/cats': training_cats,
+        'training/dogs': training_dogs,
+        'testing/cats': testing_cats,
+        'testing/dogs': testing_dogs
+    }
+
+    for dataset, image_paths in datasets.items():
+        dataset_path=f'{image_directory}/{dataset}'
+
+        Path(dataset_path).mkdir(parents=True, exist_ok=True)
+        
+        for filepath in image_paths:
+            filename=os.path.basename(filepath)
+            shutil.copy(
+                filepath,
+                f'{dataset_path}/{filename}'
+            )
