@@ -18,6 +18,31 @@ from tensorflow import keras
 from tensorflow.keras import layers
 from tensorflow.keras.models import Sequential
 
+
+# Figure out if we are in a Kaggle notebook or not
+working_directory=os.getcwd()
+path_list=working_directory.split(os.sep)
+path_list=[s for s in path_list if s]
+
+if len(path_list) >= 1:
+    if path_list[0] == 'kaggle':
+        environment='kaggle'
+
+    else:
+        environment='other'
+else:
+    environment='other'
+
+# Set experiment save file directory accordingly
+if environment == 'kaggle':
+    EXPERIMENT_DATA_PATH='/kaggle/working/experiment_results'
+
+else:
+    EXPERIMENT_DATA_PATH='../data/experiment_results'
+
+# Make the experiment save file directory
+Path(EXPERIMENT_DATA_PATH).mkdir(parents=True, exist_ok=True)
+
 ####################################################################
 # Convolutional neural network training and optimization functions #
 ####################################################################
@@ -163,7 +188,7 @@ def single_training_run(
     named_args={**locals()}
 
     # Make output file name string using values of arguments from function call
-    results_file='../data/experiment_results/single_model_run'
+    results_file=f'{EXPERIMENT_DATA_PATH}/single_model_run'
 
     for key, value in named_args.items():
         if key != 'training_data_path':
@@ -292,7 +317,7 @@ def hyperparameter_optimization_run(
     named_args = {**locals()}
 
     # Make output file name string using values of arguments from function call
-    results_file='../data/experiment_results/optimization_run'
+    results_file=f'{EXPERIMENT_DATA_PATH}/optimization_run'
 
     for key, value in named_args.items():
         if key != 'training_data_path':
@@ -513,6 +538,8 @@ def other_env_data_prep() -> Tuple[str, str]:
     print('Not running in Kaggle notebook')
 
     image_directory='../data/images'
+    raw_image_directory=f'{image_directory}/raw'
+    archive_filepath=f'{raw_image_directory}/dogs-vs-cats.zip'
 
     print('Checking data prep')
     run_data_prep=check_data_prep(image_directory)
@@ -522,8 +549,6 @@ def other_env_data_prep() -> Tuple[str, str]:
 
     else:
         print('Running data prep')
-        raw_image_directory=f'{image_directory}/raw'
-        archive_filepath=f'{raw_image_directory}/dogs-vs-cats.zip'
         print(f'Image archive should be at {archive_filepath}')
 
         if Path(archive_filepath).is_file() is False:
