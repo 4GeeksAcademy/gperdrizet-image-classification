@@ -116,8 +116,6 @@ def compile_model(
     # metrics to evaluate
     model.compile(loss='binary_crossentropy', optimizer=optimizer, metrics=['binary_accuracy'])
 
-    print(model.summary())
-
     return model
 
 
@@ -201,7 +199,7 @@ def single_training_run(
 
     if return_datasets is True:
         return training_result, training_dataset, validation_dataset
-    
+
     return training_result
 
 
