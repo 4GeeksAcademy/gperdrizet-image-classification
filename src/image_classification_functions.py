@@ -537,7 +537,7 @@ def prep_data() -> Tuple[str, str]:
         training_data_path, validation_data_path, testing_data_path=other_env_data_prep()
 
     elif environment == 'kaggle':
-        training_data_path, testing_data_path=kaggle_env_data_prep()
+        training_data_path, validation_data_path, testing_data_path=kaggle_env_data_prep()
 
     else:
         print('Could not determine environment')
