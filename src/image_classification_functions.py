@@ -7,6 +7,7 @@ import pickle
 import zipfile
 import shutil
 import glob
+import random
 from typing import Tuple
 from pathlib import Path
 
@@ -58,14 +59,15 @@ ASPECT_RATIO=4/3
 FILTER_NUMS=[16,32,64]
 FILTER_SIZE=3
 
-SINGLE_TRAINING_RUN_EPOCHS=200
-OPTIMIZATION_TRAINING_RUN_EPOCHS=20
-STEPS_PER_EPOCH=10
-VALIDATION_STEPS=10
+SINGLE_TRAINING_RUN_EPOCHS=20
+OPTIMIZATION_TRAINING_RUN_EPOCHS=10
+STEPS_PER_EPOCH=100
+VALIDATION_STEPS=100
 
 # Define a re-usable helper function to create training and validation datasets
 def make_datasets(
         training_data_path: str,
+        validation_data_path: str,
         image_width: int=IMAGE_WIDTH,
         image_height: int=IMAGE_HEIGHT,
         batch_size: int=BATCH_SIZE
@@ -73,13 +75,16 @@ def make_datasets(
 
     '''Makes training and validation dataset generator objects.'''
 
-    training_dataset, validation_dataset=tf.keras.utils.image_dataset_from_directory(
+    training_dataset=tf.keras.utils.image_dataset_from_directory(
         training_data_path,
-        validation_split=0.2,
-        subset='both',
-        seed=315,
-        shuffle=True,
-        image_size=(image_width, image_height),
+        image_size=(image_height, image_width),
+        color_mode='grayscale',
+        batch_size=batch_size
+    )
+
+    validation_dataset=tf.keras.utils.image_dataset_from_directory(
+        validation_data_path,
+        image_size=(image_height, image_width),
         color_mode='grayscale',
         batch_size=batch_size
     )
@@ -101,13 +106,17 @@ def compile_model(
 
     '''Builds the convolutional neural network classification model'''
 
-    # Define and adapt a normalization layer. This step uses a sample of images
-    # from the training dataset to calculate the mean and standard deviation
-    # which will then be used to normalize the data during training
-    sample_data=training_dataset.take(1000)
-    adapt_data=sample_data.map(lambda x, y: x)
-    norm_layer=tf.keras.layers.Normalization()
-    norm_layer.adapt(adapt_data)
+    # Define a data augmentation mini-model to use as an input layer in
+    # the classification model
+    data_augmentation=keras.Sequential(
+        [
+            layers.RandomFlip(
+                'horizontal',
+                input_shape=(image_height,image_width,1)),
+            layers.RandomRotation(0.1),
+            layers.RandomZoom(0.1),
+        ]
+    )
 
     # Set the weight initializer function
     initializer=tf.keras.initializers.GlorotUniform(seed=315)
@@ -117,8 +126,9 @@ def compile_model(
 
     # Define the model layers in order
     model=Sequential([
-        layers.Input((image_width, image_height, 1)),
-        norm_layer,
+        # layers.Input((image_width, image_height, 1)),
+        data_augmentation,
+        layers.Rescaling(1./255),
         layers.Conv2D(
             filter_nums[0],
             filter_size,
@@ -140,6 +150,7 @@ def compile_model(
             kernel_initializer=initializer
         ),
         layers.MaxPooling2D(pool_size=(2, 2)),
+        layers.Dropout(0.2),
         layers.Flatten(),
         layers.Dense(
             128,
@@ -147,13 +158,7 @@ def compile_model(
             activation='relu',
             kernel_initializer=initializer
         ),
-        layers.Dense(
-            64,
-            kernel_regularizer=regularizer,
-            activation='relu',
-            kernel_initializer=initializer
-        ),
-        layers.Dense(1, activation='sigmoid', kernel_initializer=initializer)
+        layers.Dense(1)
     ])
 
     # Define the optimizer
@@ -161,13 +166,18 @@ def compile_model(
 
     # Compile the model, specifying the type of loss to use during training and any extra
     # metrics to evaluate
-    model.compile(loss='binary_crossentropy', optimizer=optimizer, metrics=['binary_accuracy'])
+    model.compile(
+        loss=keras.losses.BinaryCrossentropy(from_logits=True),
+        optimizer=optimizer,
+        metrics=['binary_accuracy']
+    )
 
     return model
 
 
 def single_training_run(
         training_data_path: str,
+        validation_data_path: str,
         image_width: int=IMAGE_WIDTH,
         aspect_ratio: float=ASPECT_RATIO,
         batch_size: int=BATCH_SIZE,
@@ -191,8 +201,11 @@ def single_training_run(
     results_file=f'{EXPERIMENT_DATA_PATH}/single_model_run'
 
     for key, value in named_args.items():
-        if key != 'training_data_path':
-            results_file+=f'_{value}'
+        if key != 'training_data_path' and key != 'validation_data_path':
+            if isinstance(value, list):
+                results_file+=f"_{'_'.join(map(str, value))}"
+            else:
+                results_file+=f'_{value}'
 
     results_file+='.plk'
 
@@ -202,6 +215,7 @@ def single_training_run(
     # Make the streaming datasets
     training_dataset, validation_dataset=make_datasets(
         training_data_path,
+        validation_data_path,
         image_width,
         image_height,
         batch_size
@@ -298,6 +312,7 @@ def plot_single_training_run(
 
 def hyperparameter_optimization_run(
         training_data_path: str,
+        validation_data_path: str,
         image_widths: int=[IMAGE_WIDTH],
         batch_sizes: list=[BATCH_SIZE],
         learning_rates: list=[LEARNING_RATE],
@@ -320,7 +335,7 @@ def hyperparameter_optimization_run(
     results_file=f'{EXPERIMENT_DATA_PATH}/optimization_run'
 
     for key, value in named_args.items():
-        if key != 'training_data_path':
+        if key != 'training_data_path' and key != 'validation_data_path':
             if isinstance(value, list):
                 results_file+=f"_{'_'.join(map(str, value))}"
             else:
@@ -364,6 +379,7 @@ def hyperparameter_optimization_run(
             # Make the datasets with the batch size for this run
             training_dataset, validation_dataset=make_datasets(
                 training_data_path,
+                validation_data_path,
                 image_width,
                 image_height,
                 batch_size
@@ -518,7 +534,7 @@ def prep_data() -> Tuple[str, str]:
         environment='other'
 
     if environment == 'other':
-        training_data_path, testing_data_path=other_env_data_prep()
+        training_data_path, validation_data_path, testing_data_path=other_env_data_prep()
 
     elif environment == 'kaggle':
         training_data_path, testing_data_path=kaggle_env_data_prep()
@@ -527,10 +543,11 @@ def prep_data() -> Tuple[str, str]:
         print('Could not determine environment')
         training_data_path, testing_data_path=None, None
 
-    return training_data_path, testing_data_path
+    return training_data_path, validation_data_path, testing_data_path
 
 
 def other_env_data_prep() -> Tuple[str, str]:
+
     '''Organizes data that has already been downloaded via
     get_data.sh in a non-kaggle environment. Returns paths 
     to training and testing datasets.'''
@@ -581,7 +598,7 @@ def other_env_data_prep() -> Tuple[str, str]:
         print('Done')
     
 
-    return '../data/images/training', '../data/images/testing'
+    return '../data/images/training', '../data/images/validation', '../data/images/testing'
 
 
 def kaggle_env_data_prep() -> Tuple[str, str]:
@@ -628,6 +645,7 @@ def kaggle_env_data_prep() -> Tuple[str, str]:
 
 
 def check_data_prep(image_directory: str) -> bool:
+
     '''Takes string path to image directory. Checks training 
     and testing directories and image counts, returns True 
     or False if data preparation is complete.'''
@@ -637,6 +655,8 @@ def check_data_prep(image_directory: str) -> bool:
     dataset_directories=[
         'training/cats',
         'training/dogs',
+        'validation/cats',
+        'validation/dogs',
         'testing/cats',
         'testing/dogs',
     ]
@@ -661,6 +681,7 @@ def check_data_prep(image_directory: str) -> bool:
 
 
 def copy_images(raw_image_directory: str, image_directory: str) -> None:
+
     '''Takes string paths to image directory and raw image directory, splits
     cats and dogs into training and testing subsets and copies each to 
     corresponding subdirectory.'''
@@ -669,17 +690,29 @@ def copy_images(raw_image_directory: str, image_directory: str) -> None:
     dogs=glob.glob(f'{raw_image_directory}/train/dog.*')
     cats=glob.glob(f'{raw_image_directory}/train/cat.*')
 
-    num_training_images=int(len(dogs) * 0.7)
-    training_dogs=dogs[0:num_training_images]
-    testing_dogs=dogs[num_training_images:]
-    training_cats=cats[0:num_training_images]
-    testing_cats=cats[num_training_images:]
+    # Shuffle
+    random.shuffle(dogs)
+    random.shuffle(cats)
 
-    print('Moving files to train & test, cat & dog subdirectories')
+    num_training_dogs=int(len(dogs) * 0.6)
+    num_training_cats=int(len(cats) * 0.6)
+    num_validation_dogs=int(len(dogs) * 0.2)
+    num_validation_cats=int(len(cats) * 0.2)
+
+    training_dogs=dogs[0:num_training_dogs]
+    training_cats=cats[0:num_training_cats]
+    validation_cats=cats[num_training_cats:num_training_cats+num_validation_cats]
+    validation_dogs=cats[num_training_dogs:num_training_dogs+num_validation_dogs]
+    testing_dogs=dogs[num_training_dogs+num_validation_dogs:]
+    testing_cats=cats[num_training_cats+num_validation_cats:]
+
+    print('Moving files to training, validation & testing, cat & dog subdirectories')
 
     datasets={
         'training/cats': training_cats,
         'training/dogs': training_dogs,
+        'validation/cats': validation_cats,
+        'validation/dogs': validation_dogs,
         'testing/cats': testing_cats,
         'testing/dogs': testing_dogs
     }
