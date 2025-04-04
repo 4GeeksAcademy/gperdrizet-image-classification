@@ -531,6 +531,7 @@ def prep_data() -> Tuple[str, str]:
 
 
 def other_env_data_prep() -> Tuple[str, str]:
+
     '''Organizes data that has already been downloaded via
     get_data.sh in a non-kaggle environment. Returns paths 
     to training and testing datasets.'''
@@ -628,6 +629,7 @@ def kaggle_env_data_prep() -> Tuple[str, str]:
 
 
 def check_data_prep(image_directory: str) -> bool:
+
     '''Takes string path to image directory. Checks training 
     and testing directories and image counts, returns True 
     or False if data preparation is complete.'''
@@ -661,6 +663,7 @@ def check_data_prep(image_directory: str) -> bool:
 
 
 def copy_images(raw_image_directory: str, image_directory: str) -> None:
+    
     '''Takes string paths to image directory and raw image directory, splits
     cats and dogs into training and testing subsets and copies each to 
     corresponding subdirectory.'''
