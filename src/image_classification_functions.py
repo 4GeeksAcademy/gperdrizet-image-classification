@@ -641,7 +641,7 @@ def kaggle_env_data_prep() -> Tuple[str, str]:
         copy_images(raw_image_directory, image_directory)
         print('Done')
 
-    return f'{image_directory}/training', f'{image_directory}/testing'
+    return f'{image_directory}/training', f'{image_directory}/validation', f'{image_directory}/testing'
 
 
 def check_data_prep(image_directory: str) -> bool:
