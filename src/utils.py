@@ -79,7 +79,6 @@ def make_datasets(
         validation_split=0.2,
         subset='both',
         seed=315,
-        shuffle=True,
         image_size=(image_width, image_height),
         color_mode='grayscale',
         batch_size=batch_size
