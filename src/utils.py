@@ -673,14 +673,15 @@ def copy_images(raw_image_directory: str, image_directory: str) -> None:
     cats=glob.glob(f'{raw_image_directory}/train/cat.*')
 
     # Shuffle
-    dogs=random.shuffle(dogs)
-    cats=random.shuffle(dogs)
+    random.shuffle(dogs)
+    random.shuffle(cats)
 
-    num_training_images=int(len(dogs) * 0.7)
-    training_dogs=dogs[0:num_training_images]
-    testing_dogs=dogs[num_training_images:]
-    training_cats=cats[0:num_training_images]
-    testing_cats=cats[num_training_images:]
+    num_dogs=int(len(dogs) * 0.7)
+    num_cats=int(len(cats) * 0.7)
+    training_dogs=dogs[0:num_dogs]
+    testing_dogs=dogs[num_dogs:]
+    training_cats=cats[0:num_cats]
+    testing_cats=cats[num_cats:]
 
     print('Moving files to train & test, cat & dog subdirectories')
 
