@@ -7,6 +7,7 @@ import pickle
 import zipfile
 import shutil
 import glob
+import random
 from typing import Tuple
 from pathlib import Path
 
@@ -663,7 +664,7 @@ def check_data_prep(image_directory: str) -> bool:
 
 
 def copy_images(raw_image_directory: str, image_directory: str) -> None:
-    
+
     '''Takes string paths to image directory and raw image directory, splits
     cats and dogs into training and testing subsets and copies each to 
     corresponding subdirectory.'''
@@ -671,6 +672,10 @@ def copy_images(raw_image_directory: str, image_directory: str) -> None:
     # Get a list of dog and cat images
     dogs=glob.glob(f'{raw_image_directory}/train/dog.*')
     cats=glob.glob(f'{raw_image_directory}/train/cat.*')
+
+    # Shuffle
+    dogs=random.shuffle(dogs)
+    cats=random.shuffle(dogs)
 
     num_training_images=int(len(dogs) * 0.7)
     training_dogs=dogs[0:num_training_images]
