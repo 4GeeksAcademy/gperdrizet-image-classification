@@ -49,27 +49,27 @@ Path(EXPERIMENT_DATA_PATH).mkdir(parents=True, exist_ok=True)
 ####################################################################
 
 # Set some global default values for how long/how much to train
-BATCH_SIZE=8
-LEARNING_RATE=0.1
+BATCH_SIZE=32
+LEARNING_RATE=0.001
 L1_PENALTY=None
 L2_PENALTY=None
-IMAGE_HEIGHT=64
-IMAGE_WIDTH=48
+IMAGE_HEIGHT=96
+IMAGE_WIDTH=128
 ASPECT_RATIO=4/3
 FILTER_NUMS=[16,32,64]
 FILTER_SIZE=3
 
 SINGLE_TRAINING_RUN_EPOCHS=20
 OPTIMIZATION_TRAINING_RUN_EPOCHS=10
-STEPS_PER_EPOCH=100
-VALIDATION_STEPS=100
+STEPS_PER_EPOCH=10
+VALIDATION_STEPS=10
 
 # Define a re-usable helper function to create training and validation datasets
 def make_datasets(
         training_data_path: str,
         validation_data_path: str,
-        image_width: int=IMAGE_WIDTH,
         image_height: int=IMAGE_HEIGHT,
+        image_width: int=IMAGE_WIDTH,
         batch_size: int=BATCH_SIZE
 ) -> Tuple[tf.data.Dataset, tf.data.Dataset]:
 
@@ -78,14 +78,14 @@ def make_datasets(
     training_dataset=tf.keras.utils.image_dataset_from_directory(
         training_data_path,
         image_size=(image_height, image_width),
-        color_mode='grayscale',
+        #color_mode='grayscale',
         batch_size=batch_size
     )
 
     validation_dataset=tf.keras.utils.image_dataset_from_directory(
         validation_data_path,
         image_size=(image_height, image_width),
-        color_mode='grayscale',
+        #color_mode='grayscale',
         batch_size=batch_size
     )
 
@@ -94,9 +94,8 @@ def make_datasets(
 
 @tf.autograph.experimental.do_not_convert
 def compile_model(
-        training_dataset: tf.data.Dataset,
-        image_width: int=IMAGE_WIDTH,
         image_height: int=IMAGE_HEIGHT,
+        image_width: int=IMAGE_WIDTH,
         learning_rate: float=LEARNING_RATE,
         l1: float=L1_PENALTY,
         l2: float=L2_PENALTY,
@@ -110,9 +109,8 @@ def compile_model(
     # the classification model
     data_augmentation=keras.Sequential(
         [
-            layers.RandomFlip(
-                'horizontal',
-                input_shape=(image_height,image_width,1)),
+            layers.Input((image_height,image_width,3)),
+            layers.RandomFlip('horizontal'),
             layers.RandomRotation(0.1),
             layers.RandomZoom(0.1),
         ]
@@ -126,37 +124,40 @@ def compile_model(
 
     # Define the model layers in order
     model=Sequential([
-        # layers.Input((image_width, image_height, 1)),
+        layers.Input((image_height,image_width,3)),
         data_augmentation,
         layers.Rescaling(1./255),
         layers.Conv2D(
             filter_nums[0],
             filter_size,
+            padding='same',
             activation='relu',
-            kernel_initializer=initializer
+            #kernel_initializer=initializer
         ),
-        layers.MaxPooling2D(pool_size=(2, 2)),
+        layers.MaxPooling2D(),
         layers.Conv2D(
             filter_nums[1],
             filter_size,
+            padding='same',
             activation='relu',
-            kernel_initializer=initializer
+            #kernel_initializer=initializer
         ),
-        layers.MaxPooling2D(pool_size=(2, 2)),
+        layers.MaxPooling2D(),
         layers.Conv2D(
             filter_nums[2],
             filter_size,
+            padding='same',
             activation='relu',
-            kernel_initializer=initializer
+            #kernel_initializer=initializer
         ),
-        layers.MaxPooling2D(pool_size=(2, 2)),
-        layers.Dropout(0.2),
+        layers.MaxPooling2D(),
+        # layers.Dropout(0.2),
         layers.Flatten(),
         layers.Dense(
             128,
-            kernel_regularizer=regularizer,
+            #kernel_regularizer=regularizer,
             activation='relu',
-            kernel_initializer=initializer
+            #kernel_initializer=initializer
         ),
         layers.Dense(1)
     ])
@@ -168,7 +169,7 @@ def compile_model(
     # metrics to evaluate
     model.compile(
         loss=keras.losses.BinaryCrossentropy(from_logits=True),
-        optimizer=optimizer,
+        optimizer='adam',
         metrics=['binary_accuracy']
     )
 
@@ -178,8 +179,8 @@ def compile_model(
 def single_training_run(
         training_data_path: str,
         validation_data_path: str,
+        image_height: int=IMAGE_HEIGHT,
         image_width: int=IMAGE_WIDTH,
-        aspect_ratio: float=ASPECT_RATIO,
         batch_size: int=BATCH_SIZE,
         learning_rate: float=LEARNING_RATE,
         l1_penalty: float=L1_PENALTY,
@@ -189,7 +190,9 @@ def single_training_run(
         epochs: int=SINGLE_TRAINING_RUN_EPOCHS,
         steps_per_epoch: int=STEPS_PER_EPOCH,
         validation_steps: int=VALIDATION_STEPS,
-        return_datasets: bool=False
+        return_datasets: bool=False,
+        verbose: bool=False,
+        print_model_summary: bool=False
 ) -> keras.callbacks.History:
 
     '''Does one training run.'''
@@ -209,26 +212,29 @@ def single_training_run(
 
     results_file+='.plk'
 
-    # Calculate the image height from the width and target aspect ratio
-    image_height=int(image_width / aspect_ratio)
-
     # Make the streaming datasets
     training_dataset, validation_dataset=make_datasets(
         training_data_path,
         validation_data_path,
-        image_width,
         image_height,
+        image_width,
         batch_size
     )
+
+    # If the user set a limited number of steps per epoch, provide infinite datasets
+    if steps_per_epoch != None:
+        training_dataset=training_dataset.repeat()
+
+    if validation_steps != None:
+        validation_dataset=validation_dataset.repeat()
 
     # Check if we have already run this experiment, if not, run it and save the results
     if os.path.isfile(results_file) is False:
 
         # Make the model
         model=compile_model(
-            training_dataset,
-            image_width,
             image_height,
+            image_width,
             learning_rate,
             l1_penalty,
             l2_penalty,
@@ -236,14 +242,18 @@ def single_training_run(
             filter_size
         )
 
+        # Print the model summary, if desired
+        if print_model_summary is True:
+            print(f'{model.summary()}\n')
+
         # Do the training run
         training_result=model.fit(
-            training_dataset.repeat(),
-            validation_data=validation_dataset.repeat(),
+            training_dataset,
+            validation_data=validation_dataset,
             epochs=epochs,
             steps_per_epoch=steps_per_epoch,
             validation_steps=validation_steps,
-            verbose=False
+            verbose=verbose
         )
 
         # Save the results
@@ -255,12 +265,15 @@ def single_training_run(
 
         print('Training run already complete, loading results from disk.')
 
+        # Load the results object from disk
         with open(results_file, 'rb') as output_file:
             training_result=pickle.load(output_file)
 
+    # Return the datasets and training results if called for
     if return_datasets is True:
         return training_result, training_dataset, validation_dataset
 
+    # Or, return just the training result
     return training_result
 
 
@@ -337,7 +350,11 @@ def hyperparameter_optimization_run(
     for key, value in named_args.items():
         if key != 'training_data_path' and key != 'validation_data_path':
             if isinstance(value, list):
-                results_file+=f"_{'_'.join(map(str, value))}"
+                if key == 'filter_nums_list':
+                    results_file+=f"_{'_'.join(map(str, itertools.chain(*value)))}"
+                else:
+                    results_file+=f"_{'_'.join(map(str, value))}"
+
             else:
                 results_file+=f'_{value}'
 
@@ -380,16 +397,22 @@ def hyperparameter_optimization_run(
             training_dataset, validation_dataset=make_datasets(
                 training_data_path,
                 validation_data_path,
-                image_width,
                 image_height,
+                image_width,
                 batch_size
             )
 
+            # If the user set a limited number of steps per epoch, provide infinite datasets
+            if steps_per_epoch != None:
+                training_dataset=training_dataset.repeat()
+
+            if validation_steps != None:
+                validation_dataset=validation_dataset.repeat()
+
             # Compile the model with the learning rate for this run
             model=compile_model(
-                training_dataset,
-                image_width,
                 image_height,
+                image_width,
                 learning_rate,
                 l1,
                 l2,
@@ -399,8 +422,8 @@ def hyperparameter_optimization_run(
 
             # Do the training run
             hyperparameter_optimization_result=model.fit(
-                training_dataset.repeat(),
-                validation_data=validation_dataset.repeat(),
+                training_dataset,
+                validation_data=validation_dataset,
                 epochs=epochs,
                 steps_per_epoch=steps_per_epoch,
                 validation_steps=validation_steps,
@@ -702,7 +725,7 @@ def copy_images(raw_image_directory: str, image_directory: str) -> None:
     training_dogs=dogs[0:num_training_dogs]
     training_cats=cats[0:num_training_cats]
     validation_cats=cats[num_training_cats:num_training_cats+num_validation_cats]
-    validation_dogs=cats[num_training_dogs:num_training_dogs+num_validation_dogs]
+    validation_dogs=dogs[num_training_dogs:num_training_dogs+num_validation_dogs]
     testing_dogs=dogs[num_training_dogs+num_validation_dogs:]
     testing_cats=cats[num_training_cats+num_validation_cats:]
 
