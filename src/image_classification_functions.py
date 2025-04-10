@@ -48,21 +48,25 @@ Path(EXPERIMENT_DATA_PATH).mkdir(parents=True, exist_ok=True)
 # Convolutional neural network training and optimization functions #
 ####################################################################
 
-# Set some global default values for how long/how much to train
-BATCH_SIZE=32
-LEARNING_RATE=0.01
-L1_PENALTY=None
-L2_PENALTY=None
+# Defaults for image parameters
 IMAGE_HEIGHT=96
 IMAGE_WIDTH=128
 ASPECT_RATIO=4/3
-FILTER_NUMS=[16,32,64]
-FILTER_SIZE=3
+GRAYSCALE=False
 
+# Set some global default values for how long/how much to train
+BATCH_SIZE=32
+LEARNING_RATE=0.01
 SINGLE_TRAINING_RUN_EPOCHS=20
 OPTIMIZATION_TRAINING_RUN_EPOCHS=10
 STEPS_PER_EPOCH=10
 VALIDATION_STEPS=10
+
+# Defaults for some CNN parameters
+L1_PENALTY=None
+L2_PENALTY=None
+FILTER_NUMS=[16,32,64]
+FILTER_SIZE=3
 
 
 def make_datasets(
@@ -70,22 +74,28 @@ def make_datasets(
         validation_data_path: str,
         image_height: int=IMAGE_HEIGHT,
         image_width: int=IMAGE_WIDTH,
+        grayscale: bool=GRAYSCALE,
         batch_size: int=BATCH_SIZE
 ) -> Tuple[tf.data.Dataset, tf.data.Dataset]:
 
     '''Makes training and validation dataset generator objects.'''
 
+    if grayscale is True:
+        color_mode='grayscale'
+    else:
+        color_mode='rgb'
+
     training_dataset=tf.keras.utils.image_dataset_from_directory(
         training_data_path,
         image_size=(image_height, image_width),
-        #color_mode='grayscale',
+        color_mode=color_mode,
         batch_size=batch_size
     )
 
     validation_dataset=tf.keras.utils.image_dataset_from_directory(
         validation_data_path,
         image_size=(image_height, image_width),
-        #color_mode='grayscale',
+        color_mode=color_mode,
         batch_size=batch_size
     )
 
@@ -96,6 +106,7 @@ def make_datasets(
 def compile_model(
         image_height: int=IMAGE_HEIGHT,
         image_width: int=IMAGE_WIDTH,
+        grayscale: bool=GRAYSCALE,
         learning_rate: float=LEARNING_RATE,
         l1: float=L1_PENALTY,
         l2: float=L2_PENALTY,
@@ -105,11 +116,16 @@ def compile_model(
 
     '''Builds the convolutional neural network classification model'''
 
+    if grayscale is True:
+        channels=1
+    else:
+        channels=3
+
     # Define a data augmentation mini-model to use as an input layer in
     # the classification model
     data_augmentation=keras.Sequential(
         [
-            layers.Input((image_height,image_width,3)),
+            layers.Input((image_height,image_width,channels)),
             layers.RandomFlip('horizontal'),
             layers.RandomRotation(0.1),
             layers.RandomZoom(0.1),
@@ -121,7 +137,7 @@ def compile_model(
 
     # Define the model layers in order
     model=Sequential([
-        layers.Input((image_height,image_width,3)),
+        layers.Input((image_height,image_width,channels)),
         data_augmentation,
         layers.Rescaling(1./255),
         layers.Conv2D(
@@ -174,6 +190,7 @@ def single_training_run(
         validation_data_path: str,
         image_height: int=IMAGE_HEIGHT,
         image_width: int=IMAGE_WIDTH,
+        grayscale: bool=GRAYSCALE,
         batch_size: int=BATCH_SIZE,
         learning_rate: float=LEARNING_RATE,
         l1_penalty: float=L1_PENALTY,
@@ -211,6 +228,7 @@ def single_training_run(
         validation_data_path,
         image_height,
         image_width,
+        grayscale,
         batch_size
     )
 
@@ -228,6 +246,7 @@ def single_training_run(
         model=compile_model(
             image_height,
             image_width,
+            grayscale,
             learning_rate,
             l1_penalty,
             l2_penalty,
@@ -327,6 +346,7 @@ def hyperparameter_optimization_run(
         filter_nums_list: list=[FILTER_NUMS],
         filter_sizes: int=[FILTER_SIZE],
         aspect_ratio: int=ASPECT_RATIO,
+        grayscale: bool=GRAYSCALE,
         epochs: int=OPTIMIZATION_TRAINING_RUN_EPOCHS,
         steps_per_epoch: int=STEPS_PER_EPOCH,
         validation_steps: int=VALIDATION_STEPS
@@ -392,6 +412,7 @@ def hyperparameter_optimization_run(
                 validation_data_path,
                 image_height,
                 image_width,
+                grayscale,
                 batch_size
             )
 
@@ -406,6 +427,7 @@ def hyperparameter_optimization_run(
             model=compile_model(
                 image_height,
                 image_width,
+                grayscale,
                 learning_rate,
                 l1,
                 l2,
