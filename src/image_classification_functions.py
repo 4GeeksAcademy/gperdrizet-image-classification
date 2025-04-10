@@ -50,7 +50,7 @@ Path(EXPERIMENT_DATA_PATH).mkdir(parents=True, exist_ok=True)
 
 # Set some global default values for how long/how much to train
 BATCH_SIZE=32
-LEARNING_RATE=0.001
+LEARNING_RATE=0.01
 L1_PENALTY=None
 L2_PENALTY=None
 IMAGE_HEIGHT=96
@@ -64,7 +64,7 @@ OPTIMIZATION_TRAINING_RUN_EPOCHS=10
 STEPS_PER_EPOCH=10
 VALIDATION_STEPS=10
 
-# Define a re-usable helper function to create training and validation datasets
+
 def make_datasets(
         training_data_path: str,
         validation_data_path: str,
@@ -92,7 +92,7 @@ def make_datasets(
     return training_dataset, validation_dataset
 
 
-@tf.autograph.experimental.do_not_convert
+#@tf.autograph.experimental.do_not_convert
 def compile_model(
         image_height: int=IMAGE_HEIGHT,
         image_width: int=IMAGE_WIDTH,
@@ -116,9 +116,6 @@ def compile_model(
         ]
     )
 
-    # Set the weight initializer function
-    initializer=tf.keras.initializers.GlorotUniform(seed=315)
-
     # Set-up the L1L2 for the dense layers
     regularizer=tf.keras.regularizers.L1L2(l1=l1, l2=l2)
 
@@ -132,7 +129,6 @@ def compile_model(
             filter_size,
             padding='same',
             activation='relu',
-            #kernel_initializer=initializer
         ),
         layers.MaxPooling2D(),
         layers.Conv2D(
@@ -140,7 +136,6 @@ def compile_model(
             filter_size,
             padding='same',
             activation='relu',
-            #kernel_initializer=initializer
         ),
         layers.MaxPooling2D(),
         layers.Conv2D(
@@ -148,16 +143,14 @@ def compile_model(
             filter_size,
             padding='same',
             activation='relu',
-            #kernel_initializer=initializer
         ),
         layers.MaxPooling2D(),
         # layers.Dropout(0.2),
         layers.Flatten(),
         layers.Dense(
             128,
-            #kernel_regularizer=regularizer,
+            kernel_regularizer=regularizer,
             activation='relu',
-            #kernel_initializer=initializer
         ),
         layers.Dense(1)
     ])
@@ -169,7 +162,7 @@ def compile_model(
     # metrics to evaluate
     model.compile(
         loss=keras.losses.BinaryCrossentropy(from_logits=True),
-        optimizer='adam',
+        optimizer=optimizer,
         metrics=['binary_accuracy']
     )
 
