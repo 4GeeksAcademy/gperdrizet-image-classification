@@ -168,7 +168,7 @@ def compile_model(
             kernel_regularizer=regularizer,
             activation='relu',
         ),
-        layers.Dense(1)
+        layers.Dense(1, activation='sigmoid')
     ])
 
     # Define the optimizer
@@ -177,8 +177,8 @@ def compile_model(
     # Compile the model, specifying the type of loss to use during training and any extra
     # metrics to evaluate
     model.compile(
-        loss=keras.losses.BinaryCrossentropy(from_logits=True),
         optimizer=optimizer,
+        loss='binary_crossentropy',
         metrics=['binary_accuracy']
     )
 
