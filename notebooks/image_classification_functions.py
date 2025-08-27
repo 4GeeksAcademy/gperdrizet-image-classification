@@ -666,6 +666,7 @@ def kaggle_env_data_prep() -> Tuple[str, str]:
         else:
             if Path(f'{raw_image_directory}/train').is_dir() is False:
                 Path(f'{raw_image_directory}/train').mkdir(parents=True)
+
                 with zipfile.ZipFile(archive_filepath, mode='r') as archive:
                     for file in archive.namelist():
                         if file.endswith('.jpg'):

@@ -1,8 +1,5 @@
 #!/bin/bash
 
-# Export the environment variables
-source .env
-
 # Make temporary directory for data download
 mkdir -p data/images/raw
 
