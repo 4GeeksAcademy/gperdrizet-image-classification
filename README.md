@@ -32,28 +32,10 @@ The contents of the file should look like this:
 {"username":"your-user-name","key":"a-bunch-of-letters-and-numbers"}
 ```
 
-## 3. Start a codespace
+## 3. Add your Kaggle credentials to GitHub Secrets
 
-Once you have your Kaggle username and API key, fork this repository and start a Codespace as you normally would.
+You can find codespace secrets under 'settings' -> 'secrets and variables'. Full instructions for using secrets with codespaces [here](https://docs.github.com/en/codespaces/managing-your-codespaces/managing-your-account-specific-secrets-for-github-codespaces)
 
-## 4. Add your Kaggle API key
+## 4. Running on Kaggle with GPU
 
-From your codespace, open the .env file and add your Kaggle username and key from the `kaggle.json` file you downloaded to your computer from the Kaggle site earlier.
-
-
-```bash
-export KAGGLE_USERNAME=your-user-name
-export KAGGLE_KEY=a-bunch-of-letters-and-numbers
-```
-
-## 5. Download and prepare the data
-
-I have placed a series of commands to download and organize the images in a shell script for you. To use the script, run the following command in your codespace terminal:
-
-```bash
-./get_data.sh
-```
-
-The script downloads the data from Kaggle, decompresses it and moves the training cats and dogs into separate directories.
-
-Easy! Now we can work with the data in a Jupyter notebook. Open `src/mvp.ipynb` to get started.
+It is also possible to run this project on Kaggle with free GPU access. See full instructions [here](https://github.com/gperdrizet/ds-12/blob/main/pages/guides/kaggle_notebooks.md)
