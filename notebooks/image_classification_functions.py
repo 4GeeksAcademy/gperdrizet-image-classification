@@ -117,13 +117,13 @@ def compile_model(
     '''Builds the convolutional neural network classification model'''
 
     if grayscale is True:
-        channels=1
+        channels = 1
     else:
-        channels=3
+        channels = 3
 
     # Define a data augmentation mini-model to use as an input layer in
     # the classification model
-    data_augmentation=keras.Sequential(
+    data_augmentation = keras.Sequential(
         [
             layers.Input((image_height,image_width,channels)),
             layers.RandomFlip('horizontal'),
@@ -133,10 +133,10 @@ def compile_model(
     )
 
     # Set-up the L1L2 for the dense layers
-    regularizer=tf.keras.regularizers.L1L2(l1=l1, l2=l2)
+    regularizer = tf.keras.regularizers.L1L2(l1=l1, l2=l2)
 
     # Define the model layers in order
-    model=Sequential([
+    model = Sequential([
         layers.Input((image_height,image_width,channels)),
         data_augmentation,
         layers.Rescaling(1./255),
@@ -172,7 +172,7 @@ def compile_model(
     ])
 
     # Define the optimizer
-    optimizer=keras.optimizers.Adam(learning_rate=learning_rate)
+    optimizer = keras.optimizers.Adam(learning_rate=learning_rate)
 
     # Compile the model, specifying the type of loss to use during training and any extra
     # metrics to evaluate
@@ -208,22 +208,24 @@ def single_training_run(
     '''Does one training run.'''
 
     # Get dictionary of all arguments being passed into function
-    named_args={**locals()}
+    named_args = {**locals()}
 
     # Make output file name string using values of arguments from function call
-    results_file=f'{EXPERIMENT_DATA_PATH}/single_model_run'
+    results_file = f'{EXPERIMENT_DATA_PATH}/single_model_run'
 
     for key, value in named_args.items():
         if key != 'training_data_path' and key != 'validation_data_path':
-            if isinstance(value, list):
-                results_file+=f"_{'_'.join(map(str, value))}"
-            else:
-                results_file+=f'_{value}'
 
-    results_file+='.plk'
+            if isinstance(value, list):
+                results_file += f"_{'_'.join(map(str, value))}"
+
+            else:
+                results_file += f'_{value}'
+
+    results_file += '.plk'
 
     # Make the streaming datasets
-    training_dataset, validation_dataset=make_datasets(
+    training_dataset, validation_dataset = make_datasets(
         training_data_path,
         validation_data_path,
         image_height,
@@ -234,16 +236,16 @@ def single_training_run(
 
     # If the user set a limited number of steps per epoch, provide infinite datasets
     if steps_per_epoch != None:
-        training_dataset=training_dataset.repeat()
+        training_dataset = training_dataset.repeat()
 
     if validation_steps != None:
-        validation_dataset=validation_dataset.repeat()
+        validation_dataset = validation_dataset.repeat()
 
     # Check if we have already run this experiment, if not, run it and save the results
     if os.path.isfile(results_file) is False:
 
         # Make the model
-        model=compile_model(
+        model = compile_model(
             image_height,
             image_width,
             grayscale,
@@ -259,7 +261,7 @@ def single_training_run(
             print(f'{model.summary()}\n')
 
         # Do the training run
-        training_result=model.fit(
+        training_result = model.fit(
             training_dataset,
             validation_data=validation_dataset,
             epochs=epochs,
@@ -279,7 +281,7 @@ def single_training_run(
 
         # Load the results object from disk
         with open(results_file, 'rb') as output_file:
-            training_result=pickle.load(output_file)
+            training_result = pickle.load(output_file)
 
     # Return the datasets and training results if called for
     if return_datasets is True:
