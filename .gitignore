@@ -1,8 +1,6 @@
 __pycache__
+.ipynb_checkpoints
 .vscode
 .venv
-.venv-GPU
-requirements-GPU.txt
-.env
 data
 models

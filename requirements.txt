@@ -1,13 +1,11 @@
-# General data science boiler plate libraries
-pandas==2.2.3
-scikit-learn==1.6.1
-scipy==1.15.2
-matplotlib==3.10.1
-seaborn==0.13.2
-ipykernel==6.29.5
-pyarrow==19.0.1
-
-# Image classification project specific libraries
-numpy==2.1.3
-tensorflow_cpu==2.19.0
-kaggle==1.7.4.2
+jupyter
+kaggle
+matplotlib
+numpy
+pandas
+pyarrow
+scikit-learn
+scipy
+seaborn
+tensorflow_cpu
+kaggle
